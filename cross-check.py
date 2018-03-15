@@ -21,22 +21,22 @@ parser.add_option('--output',type="string", dest="output",
 cat = fits.open(options.catalogue)
 cat_data = cat[1].data 
 customSimbad = Simbad()
-#customSimbad.add_votable_fields('ra(d)','dec(d)')
+#custom/home/matt/PycharmProjectsSimbad.add_votable_fields('ra(d)','dec(d)')
 customSimbad.add_votable_fields('dist(asec)')
 customSimbad.add_votable_fields('otype')
 customSimbad.remove_votable_fields('coordinates')
 
 #results_table_rad=[0]*len(cat_data)
 #results_table_X=[0]*len(cat_data)
-#results_table_candidate=[0]*len(cat_data)
+#r/home/matt/PycharmProjectsesults_table_candidate=[0]*len(cat_data)
 #results_table_G=[0]*len(cat_data)
 ob_row_num=0
 for i in cat_data:
 	tempra=str(i[0])
 	tempdec=str(i[2])
-		string2=tempra+" "+tempdec
+	string2=tempra+" "+tempdec
 	string=tempra+"d "+tempdec+"d"
-		c=coordinates.SkyCoord(string, frame='icrs')
+	c=coordinates.SkyCoord(string, frame='icrs')
 	r=2*u.arcminute
 	results_table=customSimbad.query_region(c, radius=r)
 	#results_table_rad=customSimbad.query_criteria('region(circle, ICRS,'+string+',2.0m)',otypes='Rad')
@@ -53,7 +53,7 @@ for i in cat_data:
 	#results_table_final=from_pandas(data1)
 	image_list=SkyView.get_image_list(position=string2, survey=['NVSS', 'TGSS ADR1', 'DSS'])
 	if (type(results_table) is Table):
-			temp_field=results_table.field('OTYPE')
+		temp_field=results_table.field('OTYPE')
 		table_row_num = 0
 		columns_removed = 0
 		for x in temp_field:
