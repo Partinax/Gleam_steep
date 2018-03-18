@@ -20,6 +20,8 @@ customSimbad = Simbad()
 customSimbad.add_votable_fields('dist(asec)')
 customSimbad.add_votable_fields('otype')
 customSimbad.remove_votable_fields('coordinates')
+
+f = open('match_list.txt', 'a')
 ob_row_num = 0
 for i in cat_data:
     tempra = str(i[0])
@@ -43,6 +45,12 @@ for i in cat_data:
             table_row_num += 1
         name = str(i[0]) + '_' + str(i[2])
         results_table.pprint()
-        results_table.write('new.fits')
+        results_table.write(name+".fits", overwrite=True)
     print image_list
+    f.write(string2+'\n')
+    f.write(str(results_table))
+    f.write('\n')
+    f.write(str(image_list)+'\n')
+    f.write('#########################################################'+'\n')
     ob_row_num += 1
+f.close()
