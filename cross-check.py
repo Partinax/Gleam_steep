@@ -5,6 +5,10 @@ from astropy import coordinates
 import astropy.units as u
 from astroquery.skyview import SkyView
 from astropy.table import Table, Column
+from astropy.wcs import WCS
+from astropy.utils.data import get_pkg_data_filename
+import os
+import matplotlib.pyplot as plt
 
 def calc_sep_distance(z, asec):
     sd = []
@@ -20,14 +24,14 @@ def calc_sep_distance(z, asec):
     return sd
 
 
-def write_to_txt(results_table, string2, output):
+def write_to_txt(results_table, string2, output): #writes all the collected cross match data to a single text file
     f = open(output + ".txt", 'a')
     f.write('####################################### ' + string2 + ' #######################################' + '\n')
     f.write(str(results_table))
     f.write('\n')
     f.close()
 
-def format_filter_table(results_table):
+def format_filter_table(results_table): # formats the query return table to be ready for writing to fis table, also removs unwanted object types such as star
     temp_otype = results_table.field('OTYPE')
     results_table['MAIN_ID'] = results_table['MAIN_ID'].astype(str) # convert these table columns dtypes from object to str so that they can be saved to a .fits
     results_table['OTYPE'] = results_table['OTYPE'].astype(str)
@@ -40,11 +44,65 @@ def format_filter_table(results_table):
         table_row_num += 1
     return results_table
 
-def write_to_fits(table, name):
+def write_to_fits(table, name): # writes each individual cross match instance to an individual .fits table
     table.write(name + ".fits", overwrite=True)
     table.pprint()
 
+def plot_data_list(fits, matches, cat, object_id): # want to also plot the cross match table
+    f1 = cat.field('int_flux_088')
+    f2 = cat.field('int_flux_118')
+    f3 = cat.field('int_flux_154')
+    f4 = cat.field('int_flux_200')
+    f5 = cat.field('alpha')
 
+    y = [f1[object_id], f2[object_id], f3[object_id], f4[object_id]]
+    x = [88,118,154,200]
+    plt.subplot(221)
+    plt.plot(x, y)
+    plt.text(118, f2[object_id], r'$\alpha=$' + str(f5[object_id]))
+
+    index = 2
+    for image in fits:
+
+        wcs = WCS(image.header)
+        plt.subplot(2, 2, index)
+        plt.subplot(projection=wcs)
+        plt.imshow(image.data, vmin=-2.e-5, vmax=2.e-4, origin='lower')
+        plt.grid(color='white', ls='solid')
+        plt.xlabel('Right Ascension J2000')
+        plt.ylabel('Declination J2000')
+        index += 1
+
+
+
+def get_images(RA, DEC):
+    pos = RA + " " + DEC
+    image_list=[]
+    if DEC > -53.0:
+        tgss = SkyView.get_images(positio=pos, survey='TGSS ADR1')
+        image_list.append(tgss)
+    if DEC > -40.0:
+        nvss = SkyView.get_images(position=pos, survey='NVSS')
+        image_list.append(nvss)
+
+    dss = SkyView.get_images(position=pos, survey='DSS')
+    image_list.append(dss)
+    return image_list
+
+def get_images_save(RA, DEC):
+    pos = RA + " " + DEC
+    if DEC > -53.0:
+        tgss = SkyView.get_images(positio=pos, survey='TGSS ADR1')
+        tgss.writeto(pos+"_TGSS.fits")
+    if DEC > -40.0:
+        nvss = SkyView.get_images(position=pos, survey='NVSS')
+        nvss.writeto(pos + "_NVSS.fits")
+    dss = SkyView.get_images(position=pos, survey='DSS')
+    dss.writeto(pos + "_DSS.fits")
+
+
+
+################# __MAIN__ ######################
 usage = "Usage: %prog [options] <file>\n"
 parser = OptionParser(usage=usage)
 parser.add_option('--catalogue', type="string", dest="catalogue",
@@ -62,6 +120,9 @@ customSimbad.add_votable_fields('dist(asec)')
 customSimbad.add_votable_fields('otype')
 customSimbad.add_votable_fields('z_value')
 customSimbad.remove_votable_fields('coordinates')
+catalogue='filtered_red_selection_fin.fits'
+t = Table.read(catalogue, format = 'fits')
+
 
 ob_row_num = 0
 for i in cat_data:
