@@ -48,7 +48,7 @@ def write_to_fits(table, name): # writes each individual cross match instance to
     table.write(name + ".fits", overwrite=True)
     table.pprint()
 
-def plot_data_list(fits, matches, cat, object_id): # want to also plot the cross match table
+def plot_data_list(fits, matches, cat, object_id, name): # want to also plot the cross match table
     f1 = cat.field('int_flux_088')
     f2 = cat.field('int_flux_118')
     f3 = cat.field('int_flux_154')
@@ -57,36 +57,43 @@ def plot_data_list(fits, matches, cat, object_id): # want to also plot the cross
 
     y = [f1[object_id], f2[object_id], f3[object_id], f4[object_id]]
     x = [88,118,154,200]
-    plt.subplot(221)
-    plt.plot(x, y)
-    plt.text(118, f2[object_id], r'$\alpha=$' + str(f5[object_id]))
+    fig = plt.figure()
+    sed = fig.add_subplot(231)
+    sed.plot(x, y)
+    sed.text(118, f2[object_id], r'$\alpha=$' + str(f5[object_id]))
 
-    index = 2
-    for image in fits:
-
-        wcs = WCS(image.header)
-        plt.subplot(2, 2, index)
-        plt.subplot(projection=wcs)
-        plt.imshow(image.data, vmin=-2.e-5, vmax=2.e-4, origin='lower')
-        plt.grid(color='white', ls='solid')
-        plt.xlabel('Right Ascension J2000')
-        plt.ylabel('Declination J2000')
+    matches.write('table', format='latex') # purpose of all this mess is to convert the Table object to a latex format, then read that back in as a single string
+    with open('table', 'r') as myfile:
+        text = myfile.read().replace("\\begin{table}", '') # various conversions to get matplot lib to read as a table
+        text = text.replace( "\end{table}", '')
+        text = "r'''"+text+"'''"
+    table = fig.add_subplot(232)
+    table.text(0, 0, text, size=12)
+    index = 3
+    for hdul in fits: # need a good way to determine if the image is NVSS TGSS or DSS
+        wcs = WCS(hdul[0].header)
+        image = fig.add_subplot(2, 3, index)
+        fig.add_subplot(projection=wcs)
+        image.imshow(hdul[0].data, vmin=-2.e-5, vmax=2.e-4, origin='lower')
+        image.grid(color='white', ls='solid')
+        image.set_xlabel('Right Ascension J2000') # can't add labels directly to the subplot object?
+        image.set_ylabel('Declination J2000')
         index += 1
+    fig.savefig(name+".png")
 
 
-
-def get_images(RA, DEC):
+def get_images_list(RA, DEC):
     pos = RA + " " + DEC
     image_list=[]
     if DEC > -53.0:
-        tgss = SkyView.get_images(positio=pos, survey='TGSS ADR1')
-        image_list.append(tgss)
+        tgss = SkyView.get_images(position=pos, survey='TGSS ADR1')
+        image_list.append(tgss[0])
     if DEC > -40.0:
         nvss = SkyView.get_images(position=pos, survey='NVSS')
-        image_list.append(nvss)
+        image_list.append(nvss[0])
 
     dss = SkyView.get_images(position=pos, survey='DSS')
-    image_list.append(dss)
+    image_list.append(dss[0])
     return image_list
 
 def get_images_save(RA, DEC):
@@ -133,6 +140,7 @@ for i in cat_data:
     c = coordinates.SkyCoord(string, frame='icrs')
     r = 2 * u.arcminute
     results_table = customSimbad.query_region(c, radius=r)
+    fits = get_images_list(tempra, tempdec)
     #image_list = SkyView.get_images(position=string2, survey=['NVSS', 'TGSS ADR1', 'DSS'])
     if type(results_table) is Table:
         results_table = format_filter_table(results_table)
@@ -144,6 +152,7 @@ for i in cat_data:
         write_to_fits(results_table, string2)
         #print image_list
         write_to_txt(results_table, string2, options.output)
+        plot_data_list(fits, results_table, t, ob_row_num, string2)
     ob_row_num += 1
 
 
