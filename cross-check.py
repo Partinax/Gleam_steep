@@ -8,6 +8,7 @@ from astropy.table import Table, Column
 from astropy.wcs import WCS
 from astropy.utils.data import get_pkg_data_filename
 import os
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 
 def calc_sep_distance(z, asec):
@@ -62,22 +63,37 @@ def plot_data_list(fits, matches, cat, object_id, name): # want to also plot the
     sed.plot(x, y)
     sed.text(118, f2[object_id], r'$\alpha=$' + str(f5[object_id]))
 
+    mpl.rc('text', usetex=True)
+    matches.remove_column('MAIN_ID')
     matches.write('table', format='latex') # purpose of all this mess is to convert the Table object to a latex format, then read that back in as a single string
     with open('table', 'r') as myfile:
-        text = myfile.read().replace("\\begin{table}", '') # various conversions to get matplot lib to read as a table
-        text = text.replace( "\end{table}", '')
-        text = "r'''"+text+"'''"
+
+        text = myfile.read()#.replace("\\", "\\\\" ) # various conversions to get matplot lib to read as a table
+        #text = text.replace( r, rr)
+        #text = '%r' %text
+        print text
     table = fig.add_subplot(232)
-    table.text(0, 0, text, size=12)
+    table.text(0, 0, text, size=8)
     index = 3
-    for hdul in fits: # need a good way to determine if the image is NVSS TGSS or DSS
+    for i in range(0, len(fits), 2): # need a good way to determine if the image is NVSS TGSS or DSS
+        name = fits[i]
+        hdul = fits[i+1]
         wcs = WCS(hdul[0].header)
         image = fig.add_subplot(2, 3, index)
         fig.add_subplot(projection=wcs)
-        image.imshow(hdul[0].data, vmin=-2.e-5, vmax=2.e-4, origin='lower')
+        image.imshow(hdul[0].data, vmin=0.01, vmax=0.03, origin='lower')
         image.grid(color='white', ls='solid')
-        image.set_xlabel('Right Ascension J2000') # can't add labels directly to the subplot object?
+        image.set_xlabel('Right Ascension J2000')
         image.set_ylabel('Declination J2000')
+        if name == 'TGSS':
+            image.imshow(hdul[0].data, vmin=0.1, vmax=0.3, origin='lower')
+
+        if name == 'NVSS':
+            image.imshow(hdul[0].data, vmin=0.01, vmax=0.03, origin='lower')
+
+        if name == 'DSS':
+            image.imshow(hdul[0].data, vmin=0.01, vmax=100, origin='lower')
+
         index += 1
     fig.savefig(name+".png")
 
@@ -85,14 +101,19 @@ def plot_data_list(fits, matches, cat, object_id, name): # want to also plot the
 def get_images_list(RA, DEC):
     pos = RA + " " + DEC
     image_list=[]
+    DEC = float(DEC)
     if DEC > -53.0:
+        print DEC
         tgss = SkyView.get_images(position=pos, survey='TGSS ADR1')
+        image_list.append('TGSS')
         image_list.append(tgss[0])
     if DEC > -40.0:
         nvss = SkyView.get_images(position=pos, survey='NVSS')
+        image_list.append('NVSS')
         image_list.append(nvss[0])
 
     dss = SkyView.get_images(position=pos, survey='DSS')
+    image_list.append('DSS')
     image_list.append(dss[0])
     return image_list
 
