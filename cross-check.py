@@ -53,7 +53,7 @@ def write_to_fits(table, name): # writes each individual cross match instance to
     table.write(name + ".fits", overwrite=True)
 
 
-def plot_data_list(fits, matches, cat, object_id, name): # want to also plot the cross match table
+def plot_data_list(fits, matches, cat, object_id, object_name): # want to also plot the cross match table
     ## preping metadata and table format##
 
     f1 = cat.field('int_flux_088')
@@ -76,17 +76,37 @@ def plot_data_list(fits, matches, cat, object_id, name): # want to also plot the
         matches.remove_column('Z_VALUE')
         matches.remove_column('RA')
         matches.remove_column('DEC')
+        marker = ['']*(len(ra))
+        marker_list = ['+', 'o', 'x', '*', 'v']
+        for j in range(len(ra)):
+            if type(marker[j]) is not None and j < 5:
+                marker[j] = marker_list[j]
+        marker=Column(name="MARKER", data=marker)
+        results_table.add_column(marker)
         matches.pprint()
         matches.write('table', format='latex') # purpose of all this mess is to convert the Table object to a latex format, then read that back in as a single string
         with open('table', 'r') as myfile:
 
-            matches_string = myfile.read().replace("\\begin{table}","")  # various convmatches.remove_column('RA')ersions to get matplot lib to read as a table
-        matches_string = matches_string.replace("\\end{table}", "")
+            matches_list = myfile.readlines()#.replace("\\begin{table}","")  # various convmatches.remove_column('RA')ersions to get matplot lib to read as a table
+
+            del matches_list[0]
+            del matches_list[len(matches_list) - 1]
+            matches_string = ''
+            for line in matches_list:
+                matches_string += line
+
+
             # print matches_string
-        matches_string = '%r' % matches_string
+        matches_string = '%r' %matches_string
+        matches_string = matches_string.replace('\\n', '')
             # print matches_string
         matches_string = matches_string.replace('\\\\', '\\')
+        #matches_string = matches_string.replace('\\\\', '\\n')
+        #matches_string = matches_string.replace('{', '{{')
+        #matches_string = matches_string.replace('}', '}}')
+        print matches_string
             # print matches_string
+
     else:
         matches_string = "none"
         ra = []
@@ -113,7 +133,7 @@ def plot_data_list(fits, matches, cat, object_id, name): # want to also plot the
         wcs = WCS(hdul[0].header) #this is not giving proper co-ordinates
         image = fig.add_subplot(2, 3, index, projection=wcs)
         for j in range(len(ra)): # adds co-ordinates markers to images for 5 closest simbad matches
-            if type(ra[j]) is not None and j < 5:
+            if type(ra[j]) is not None and j < 5: # checks to see if markers haven't gone over and ra is long enough for each marker
                 c = SkyCoord(str(ra[j])+" "+str(dec[j]), unit=(u.hourangle, u.deg))
 
                 x, y = wcs.wcs_world2pix(c.ra.degree, c.dec.degree, 0) # how does this even work? It doesn't know the FOV of the images
@@ -137,7 +157,8 @@ def plot_data_list(fits, matches, cat, object_id, name): # want to also plot the
             image.imshow(hdul[0].data, vmin=0.01, vmax=20000, origin='lower')
 
         index += 1
-    fig.savefig(name+".png")
+    fig.set_size_inches((13, 8.5), forward=False)
+    plt.savefig(str(object_id) +', '+ object_name+".png", dpi=500)
 
 
 def get_images_list(RA, DEC):
@@ -211,7 +232,7 @@ for i in cat_data:
         temp_z = results_table.field('Z_VALUE')
         temp_asec = results_table.field('ANG_DIST')
         seperation_dist = calc_sep_distance(temp_z, temp_asec)
-        sep_dist=Column(name="SEP_DIST(Mpc)", data=seperation_dist)
+        sep_dist=Column(name="SEP DIST(Mpc)", data=seperation_dist)
         results_table.add_column(sep_dist)
         #write_to_fits(results_table, string2)
         #print image_list
