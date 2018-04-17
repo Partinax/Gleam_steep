@@ -12,6 +12,7 @@ import os
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 from astropy.coordinates import SkyCoord
+import numpy as np
 
 def calc_sep_distance(z, asec):
     sd = []
@@ -54,8 +55,10 @@ def write_to_fits(table, name): # writes each individual cross match instance to
 
 
 def plot_data_list(fits, matches, cat, object_id, object_name): # want to also plot the cross match table
-    ## preping metadata and table format##
+    #### preping metadata and table format ####
 
+    gleam_RA = cat.field('ra_088')[object_id]
+    gleam_DEC = cat.field('dec_088')[object_id]
     f1 = cat.field('int_flux_088')
     f2 = cat.field('int_flux_118')
     f3 = cat.field('int_flux_154')
@@ -67,6 +70,7 @@ def plot_data_list(fits, matches, cat, object_id, object_name): # want to also p
     third = {"marker": "x", "linestyle": "None", "color": "red"}
     fourth = {"marker": "*", "linestyle": "None", "color": "red"}
     fifth = {"marker": "v", "linestyle": "None", "color": "red"}
+    gleam_marker = {"marker": ".", "linestyle": "None", "color": "white"}
 
     if type(matches) is Table:
         ra = matches.field('RA')
@@ -96,16 +100,10 @@ def plot_data_list(fits, matches, cat, object_id, object_name): # want to also p
                 matches_string += line
 
 
-            # print matches_string
         matches_string = '%r' %matches_string
         matches_string = matches_string.replace('\\n', '')
-            # print matches_string
         matches_string = matches_string.replace('\\\\', '\\')
-        #matches_string = matches_string.replace('\\\\', '\\n')
-        #matches_string = matches_string.replace('{', '{{')
-        #matches_string = matches_string.replace('}', '}}')
         print matches_string
-            # print matches_string
 
     else:
         matches_string = "none"
@@ -115,7 +113,9 @@ def plot_data_list(fits, matches, cat, object_id, object_name): # want to also p
 
 
 
-    ## plotting data ##
+    #### plotting data ####
+
+    ## plot SED ##
     fig = plt.figure()
     y = [f1[object_id], f2[object_id], f3[object_id], f4[object_id]]
     x = [88,118,154,200]
@@ -123,40 +123,46 @@ def plot_data_list(fits, matches, cat, object_id, object_name): # want to also p
     sed.plot(x, y)
     sed.text(118, f2[object_id], r'$\alpha=$' + str(f5[object_id]))
 
+    ## plot matches table ##
     mpl.rc('text', usetex=True)
     table = fig.add_subplot(232)
     table.text(0, 0, matches_string, size=10)
+
+    ## plot TGSS, NVSS and DSS images ##
     index = 3
     for i in range(0, len(fits), 2):
         name = fits[i]
         hdul = fits[i+1]
-        wcs = WCS(hdul[0].header) #this is not giving proper co-ordinates
+        wcs = WCS(hdul[0].header)
         image = fig.add_subplot(2, 3, index, projection=wcs)
+        c = SkyCoord(str(gleam_RA) + " " + str(gleam_DEC), unit=(u.deg, u.deg))
+        x, y = wcs.wcs_world2pix(c.ra.degree, c.dec.degree, 0)
+        image.plot(x, y, **gleam_marker)
         for j in range(len(ra)): # adds co-ordinates markers to images for 5 closest simbad matches
             if type(ra[j]) is not None and j < 5: # checks to see if markers haven't gone over and ra is long enough for each marker
                 c = SkyCoord(str(ra[j])+" "+str(dec[j]), unit=(u.hourangle, u.deg))
 
                 x, y = wcs.wcs_world2pix(c.ra.degree, c.dec.degree, 0) # how does this even work? It doesn't know the FOV of the images
                 image.plot(x, y, **icons[j])
-                #print x, y
-        #ax = fig.add_subplot(projection=wcs)
-        #overlay = image.get_coords_overlay('fk5')
-        #overlay.grid(color='white', ls='dotted')
-        #overlay[0].set_axislabel('Right Ascension (J2000)')
-        #overlay[1].set_axislabel('Declination (J2000)')
+
         image.grid(color='white', ls='solid')
         image.set_xlabel('Right Ascension J2000')
         image.set_ylabel('Declination J2000')
         if name == 'TGSS':
-            image.imshow(hdul[0].data, vmin=0.1, vmax=0.3, origin='lower') #dynamically applies image scaling
+            image.imshow(hdul[0].data, vmin=-0.6, vmax=0.6, origin='lower') #dynamically applies image scaling
 
         if name == 'NVSS':
-            image.imshow(hdul[0].data, vmin=0.01, vmax=0.03, origin='lower')
+            image.imshow(hdul[0].data, vmin=-0.06, vmax=0.06, origin='lower')
 
         if name == 'DSS':
-            image.imshow(hdul[0].data, vmin=0.01, vmax=20000, origin='lower')
+            image_temp = hdul[0].data
+            vmin = 1 * np.std(image_temp)
+            vmax = 10 * vmin
+            image.imshow(image_temp, vmin=vmin, vmax=vmax, origin='lower')
 
         index += 1
+
+    ## save image to png ##
     fig.set_size_inches((13, 8.5), forward=False)
     plt.savefig(str(object_id) +', '+ object_name+".png", dpi=500)
 
@@ -179,7 +185,7 @@ def get_images_list(RA, DEC):
     image_list.append(dss[0])
     return image_list
 
-def get_images_save(RA, DEC):
+def get_images_save(RA, DEC): # if exists use this method instead of downloading new one.
     pos = RA + " " + DEC
     if DEC > -53.0:
         tgss = SkyView.get_images(positio=pos, survey='TGSS ADR1')
