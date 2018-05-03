@@ -13,6 +13,7 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 from astropy.coordinates import SkyCoord
 import numpy as np
+import gleam_client as GC
 
 def calc_sep_distance(z, asec):
     sd = []
@@ -54,7 +55,7 @@ def write_to_fits(table, name): # writes each individual cross match instance to
     table.write(name + ".fits", overwrite=True)
 
 
-def plot_data_list(fits, matches, cat, object_id, object_name): # want to also plot the cross match table
+def plot_data_list(fits_list, matches, cat, object_id, object_name): # want to also plot the cross match table
     #### preping metadata and table format ####
 
     gleam_RA = cat.field('ra_088')[object_id]
@@ -64,6 +65,7 @@ def plot_data_list(fits, matches, cat, object_id, object_name): # want to also p
     f3 = cat.field('int_flux_154')
     f4 = cat.field('int_flux_200')
     f5 = cat.field('alpha')
+    peak = cat.field('peak_flux_088')[object_id]
 
     first = {"marker": "+", "linestyle": "None", "color": "red"}
     second = {"marker": "o", "linestyle": "None", "color": "red"}
@@ -130,9 +132,9 @@ def plot_data_list(fits, matches, cat, object_id, object_name): # want to also p
 
     ## plot TGSS, NVSS and DSS images ##
     index = 3
-    for i in range(0, len(fits), 2):
-        name = fits[i]
-        hdul = fits[i+1]
+    for i in range(0, len(fits_list), 2):
+        name = fits_list[i]
+        hdul = fits_list[i+1]
         wcs = WCS(hdul[0].header)
         image = fig.add_subplot(2, 3, index, projection=wcs)
         c = SkyCoord(str(gleam_RA) + " " + str(gleam_DEC), unit=(u.deg, u.deg))
@@ -149,52 +151,94 @@ def plot_data_list(fits, matches, cat, object_id, object_name): # want to also p
         image.set_xlabel('Right Ascension J2000')
         image.set_ylabel('Declination J2000')
         if name == 'TGSS':
-            image.imshow(hdul[0].data, vmin=-0.6, vmax=0.6, origin='lower') #dynamically applies image scaling
+            image_temp = hdul[0].data
+            vmin = 1 * np.std(image_temp)
+            vmax = 4 * vmin
+            image.imshow(hdul[0].data, vmin=-vmax, vmax=vmax, origin='lower') #dynamically applies image scaling
+            image.set_title("TGSS")
 
         if name == 'NVSS':
-            image.imshow(hdul[0].data, vmin=-0.06, vmax=0.06, origin='lower')
+            image_temp = hdul[0].data
+            vmin = 1 * np.std(image_temp)
+            vmax = 4 * vmin
+            image.imshow(hdul[0].data, vmin=-vmax, vmax=vmax, origin='lower')
+            image.set_title("NVSS")
 
         if name == 'DSS':
             image_temp = hdul[0].data
             vmin = 1 * np.std(image_temp)
             vmax = 10 * vmin
             image.imshow(image_temp, vmin=vmin, vmax=vmax, origin='lower')
+            image.set_title("DSS")
 
         index += 1
 
+    ## plot gleam image ##
+    ra = gleam_RA
+    dec = gleam_DEC
+    ang_size = 0.25
+    freq_low = ['072-103', '103-134', '134-170']
+    projection = 'SIN'
+    dl_dir = '/home/matt/project/Data/temp/'
+
+    GC.vo_get(ra, dec, ang_size, proj_opt=projection, freq=freq_low, download_dir=dl_dir)
+    gleam_name_r = dl_dir + GC.create_filename(ra, dec, ang_size, freq_low[0])
+    gleam_name_g = dl_dir + GC.create_filename(ra, dec, ang_size, freq_low[1])
+    gleam_name_b = dl_dir + GC.create_filename(ra, dec, ang_size, freq_low[2])
+    red_hdul = fits.open(gleam_name_r)
+    green_hdul = fits.open(gleam_name_g)
+    blue_hdul = fits.open(gleam_name_r)
+    red_data = red_hdul[0].data
+    blue_data = blue_hdul[0].data
+    green_data = green_hdul[0].data
+    rgb_image = np.dstack([red_data, green_data, blue_data])
+    wcs = WCS(red_hdul[0].header)
+    image = fig.add_subplot(2, 3, index, projection=wcs)
+    rgb_image -= np.min(np.nanmin(rgb_image))
+    rgb_image /= np.max(np.nanmax(rgb_image))
+    image.imshow(rgb_image, vmin=-peak, vmax=peak, origin='lower')
+    image.grid(color='white', ls='solid')
+    image.set_xlabel('Right Ascension J2000')
+    image.set_ylabel('Declination J2000')
+    image.set_title("GLEAM")
+    c = SkyCoord(str(gleam_RA) + " " + str(gleam_DEC), unit=(u.deg, u.deg))
+    x, y = wcs.wcs_world2pix(c.ra.degree, c.dec.degree, 0)
+    image.plot(x, y, **gleam_marker)
+
     ## save image to png ##
     fig.set_size_inches((13, 8.5), forward=False)
-    plt.savefig(str(object_id) +', '+ object_name+".png", dpi=500)
+    plt.savefig("/home/matt/project/Data/aggregates/"+str(object_id+1) +', '+ object_name+".png", dpi=500)
 
 
-def get_images_list(RA, DEC):
+def get_images_list(RA, DEC, radius):
     pos = RA + " " + DEC
     image_list=[]
     DEC = float(DEC)
     if DEC > -53.0:
-        tgss = SkyView.get_images(position=pos, survey='TGSS ADR1')
+        tgss = SkyView.get_images(position=pos, survey='TGSS ADR1', radius=radius)
         image_list.append('TGSS')
         image_list.append(tgss[0])
     if DEC > -40.0:
-        nvss = SkyView.get_images(position=pos, survey='NVSS')
+        nvss = SkyView.get_images(position=pos, survey='NVSS', radius=radius)
         image_list.append('NVSS')
         image_list.append(nvss[0])
 
-    dss = SkyView.get_images(position=pos, survey='DSS')
+    dss = SkyView.get_images(position=pos, survey='DSS', radius=radius)
     image_list.append('DSS')
     image_list.append(dss[0])
     return image_list
 
-def get_images_save(RA, DEC): # if exists use this method instead of downloading new one.
+def get_images_save(RA, DEC, id): # if exists use this method instead of downloading new one.
     pos = RA + " " + DEC
+    DEC = float(DEC)
     if DEC > -53.0:
-        tgss = SkyView.get_images(positio=pos, survey='TGSS ADR1')
-        tgss.writeto(pos+"_TGSS.fits")
+        tgss = SkyView.get_images(position=pos, survey='TGSS ADR1')
+        tgss[0].writeto('/home/matt/project/Data/temp/'+ str(id) +"_" +pos+"_TGSS.fits", overwrite = True)
     if DEC > -40.0:
         nvss = SkyView.get_images(position=pos, survey='NVSS')
-        nvss.writeto(pos + "_NVSS.fits")
+        nvss[0].writeto('/home/matt/project/Data/temp/'+ str(id) +"_" + pos + "_NVSS.fits", overwrite = True)
     dss = SkyView.get_images(position=pos, survey='DSS')
-    dss.writeto(pos + "_DSS.fits")
+    dss[0].writeto('/home/matt/project/Data/temp/'+ str(id) +"_" + pos + "_DSS.fits", overwrite = True)
 
 
 
@@ -224,14 +268,16 @@ t = Table.read(catalogue, format = 'fits')
 
 ob_row_num = 0
 for i in cat_data:
-    tempra = str(i[0])
-    tempdec = str(i[2])
+    tempra = str(t.field('ra_088')[ob_row_num])
+    tempdec = str(t.field('dec_088')[ob_row_num])
     string2 = tempra + " " + tempdec
     string = tempra + "d " + tempdec + "d"
     c = coordinates.SkyCoord(string, frame='icrs')
     r = 2 * u.arcminute
+    image_radius = 15 * u.arcminute
     results_table = customSimbad.query_region(c, radius=r)
-    fits = get_images_list(tempra, tempdec)
+    fits_list = get_images_list(tempra, tempdec, image_radius)
+    get_images_save(tempra, tempdec, ob_row_num + 1)
     #image_list = SkyView.get_images(position=string2, survey=['NVSS', 'TGSS ADR1', 'DSS'])
     if type(results_table) is Table:
         results_table = format_filter_table(results_table)
@@ -243,7 +289,7 @@ for i in cat_data:
         #write_to_fits(results_table, string2)
         #print image_list
         write_to_txt(results_table, string2, options.output)
-    plot_data_list(fits, results_table, t, ob_row_num, string2)
+    plot_data_list(fits_list, results_table, t, ob_row_num, string2)
     ob_row_num += 1
 
 
