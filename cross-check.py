@@ -14,6 +14,8 @@ import matplotlib.pyplot as plt
 from astropy.coordinates import SkyCoord
 import numpy as np
 import gleam_client as GC
+import matplotlib.patches as patches
+import montage_wrapper as montage
 
 def calc_sep_distance(z, asec):
     sd = []
@@ -72,7 +74,7 @@ def plot_data_list(fits_list, matches, cat, object_id, object_name): # want to a
     third = {"marker": "x", "linestyle": "None", "color": "red"}
     fourth = {"marker": "*", "linestyle": "None", "color": "red"}
     fifth = {"marker": "v", "linestyle": "None", "color": "red"}
-    gleam_marker = {"marker": ".", "linestyle": "None", "color": "white"}
+    gleam_marker = {"marker": ".", "linestyle": "None", "color": "blue"}
 
     if type(matches) is Table:
         ra = matches.field('RA')
@@ -125,6 +127,9 @@ def plot_data_list(fits_list, matches, cat, object_id, object_name): # want to a
     sed.plot(x, y)
     sed.text(118, f2[object_id], r'$\alpha=$' + str(f5[object_id]))
 
+    sed.set_xlabel('Frequency (MHz)')
+    sed.set_ylabel('Flux (mJy)')
+
     ## plot matches table ##
     mpl.rc('text', usetex=True)
     table = fig.add_subplot(232)
@@ -176,7 +181,7 @@ def plot_data_list(fits_list, matches, cat, object_id, object_name): # want to a
     ## plot gleam image ##
     ra = gleam_RA
     dec = gleam_DEC
-    ang_size = 0.25
+    ang_size = 0.50
     freq_low = ['072-103', '103-134', '134-170']
     projection = 'SIN'
     dl_dir = '/home/matt/project/Data/temp/'
@@ -187,13 +192,20 @@ def plot_data_list(fits_list, matches, cat, object_id, object_name): # want to a
     gleam_name_b = dl_dir + GC.create_filename(ra, dec, ang_size, freq_low[2])
     red_hdul = fits.open(gleam_name_r)
     green_hdul = fits.open(gleam_name_g)
-    blue_hdul = fits.open(gleam_name_r)
+    try:
+        blue_hdul = fits.open(gleam_name_b)
+        blue_data = blue_hdul[0].data
+    except:
+        blue_data = None
     red_data = red_hdul[0].data
-    blue_data = blue_hdul[0].data
     green_data = green_hdul[0].data
+    montage.mgethdr(red_data, "temp.txt")
+    montage.reproject(green_data, green_data, header="temp.txt", exact_size=True)
+    montage.reproject(blue_data, blue_data, header="temp.txt", exact_size=True)
     rgb_image = np.dstack([red_data, green_data, blue_data])
     wcs = WCS(red_hdul[0].header)
     image = fig.add_subplot(2, 3, index, projection=wcs)
+
     rgb_image -= np.min(np.nanmin(rgb_image))
     rgb_image /= np.max(np.nanmax(rgb_image))
     image.imshow(rgb_image, vmin=-peak, vmax=peak, origin='lower')
@@ -203,7 +215,9 @@ def plot_data_list(fits_list, matches, cat, object_id, object_name): # want to a
     image.set_title("GLEAM")
     c = SkyCoord(str(gleam_RA) + " " + str(gleam_DEC), unit=(u.deg, u.deg))
     x, y = wcs.wcs_world2pix(c.ra.degree, c.dec.degree, 0)
+    image.add_patch(patches.Rectangle( (7.5, 7.5), 15, 15, fill=False, edgecolor="white"))
     image.plot(x, y, **gleam_marker)
+
 
     ## save image to png ##
     fig.set_size_inches((13, 8.5), forward=False)
