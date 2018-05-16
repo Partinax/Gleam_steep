@@ -190,18 +190,26 @@ def plot_data_list(fits_list, matches, cat, object_id, object_name): # want to a
     gleam_name_r = dl_dir + GC.create_filename(ra, dec, ang_size, freq_low[0])
     gleam_name_g = dl_dir + GC.create_filename(ra, dec, ang_size, freq_low[1])
     gleam_name_b = dl_dir + GC.create_filename(ra, dec, ang_size, freq_low[2])
+
+    montage.mGetHdr(gleam_name_r, "temp.txt")
     red_hdul = fits.open(gleam_name_r)
-    green_hdul = fits.open(gleam_name_g)
+    red_data = red_hdul[0].data
+
+    new_gleam_name_g = dl_dir + "_repr_" + GC.create_filename(ra, dec, ang_size, freq_low[1])
+    montage.reproject(gleam_name_g, new_gleam_name_g, header="temp.txt", exact_size=True)
+    green_hdul = fits.open(new_gleam_name_g)
+    green_data = green_hdul[0].data
+
     try:
-        blue_hdul = fits.open(gleam_name_b)
+        oldfile = gleam_name_b
+        new_gleam_name_b= dl_dir + "_repr_" + GC.create_filename(ra, dec, ang_size, freq_low[2])
+        montage.reproject(oldfile, new_gleam_name_b, header="temp.txt", exact_size=True)
+        blue_hdul = fits.open(new_gleam_name_b)
         blue_data = blue_hdul[0].data
     except:
         blue_data = None
-    red_data = red_hdul[0].data
-    green_data = green_hdul[0].data
-    montage.mgethdr(red_data, "temp.txt")
-    montage.reproject(green_data, green_data, header="temp.txt", exact_size=True)
-    montage.reproject(blue_data, blue_data, header="temp.txt", exact_size=True)
+        print("No Blue Image")
+
     rgb_image = np.dstack([red_data, green_data, blue_data])
     wcs = WCS(red_hdul[0].header)
     image = fig.add_subplot(2, 3, index, projection=wcs)
