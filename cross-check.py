@@ -67,6 +67,10 @@ def plot_data_list(fits_list, matches, cat, object_id, object_name): # want to a
     f3 = cat.field('int_flux_154')
     f4 = cat.field('int_flux_200')
     f5 = cat.field('alpha')
+    err_f1 = cat.field('err_int_flux_088')
+    err_f2 = cat.field('err_int_flux_118')
+    err_f3 = cat.field('err_int_flux_154')
+    err_f4 = cat.field('err_int_flux_200')
     peak = cat.field('peak_flux_088')[object_id]
 
     first = {"marker": "+", "linestyle": "None", "color": "red"}
@@ -118,17 +122,21 @@ def plot_data_list(fits_list, matches, cat, object_id, object_name): # want to a
 
 
     #### plotting data ####
+    fig = plt.figure()
 
     ## plot SED ##
-    fig = plt.figure()
+
     y = [f1[object_id], f2[object_id], f3[object_id], f4[object_id]]
     x = [88,118,154,200]
     sed = fig.add_subplot(231)
-    sed.plot(x, y)
+    err = [err_f1[object_id], err_f2[object_id], err_f3[object_id], err_f4[object_id]]
+    sed.errorbar(x, y, yerr= err)
     sed.text(118, f2[object_id], r'$\alpha=$' + str(f5[object_id]))
-
+    sed.set_yscale('log')
+    sed.set_xscale('log')
     sed.set_xlabel('Frequency (MHz)')
     sed.set_ylabel('Flux (mJy)')
+
 
     ## plot matches table ##
     mpl.rc('text', usetex=True)
@@ -182,7 +190,7 @@ def plot_data_list(fits_list, matches, cat, object_id, object_name): # want to a
     ra = gleam_RA
     dec = gleam_DEC
     ang_size = 0.50
-    freq_low = ['072-103', '103-134', '134-170']
+    freq_low = ['072-103', '103-134', '139-170']
     projection = 'SIN'
     dl_dir = '/home/matt/project/Data/temp/'
 
@@ -191,40 +199,46 @@ def plot_data_list(fits_list, matches, cat, object_id, object_name): # want to a
     gleam_name_g = dl_dir + GC.create_filename(ra, dec, ang_size, freq_low[1])
     gleam_name_b = dl_dir + GC.create_filename(ra, dec, ang_size, freq_low[2])
 
-    montage.mGetHdr(gleam_name_r, "temp.txt")
-    red_hdul = fits.open(gleam_name_r)
-    red_data = red_hdul[0].data
 
-    new_gleam_name_g = dl_dir + "_repr_" + GC.create_filename(ra, dec, ang_size, freq_low[1])
-    montage.reproject(gleam_name_g, new_gleam_name_g, header="temp.txt", exact_size=True)
-    green_hdul = fits.open(new_gleam_name_g)
-    green_data = green_hdul[0].data
-
+    #fits.writeto("red_test.fits", red_data)
+    #fits.writeto("green_test.fits", green_data)
     try:
-        oldfile = gleam_name_b
-        new_gleam_name_b= dl_dir + "_repr_" + GC.create_filename(ra, dec, ang_size, freq_low[2])
-        montage.reproject(oldfile, new_gleam_name_b, header="temp.txt", exact_size=True)
-        blue_hdul = fits.open(new_gleam_name_b)
+        montage.mGetHdr(gleam_name_b, "temp.txt")
+        blue_hdul = fits.open(gleam_name_b)
         blue_data = blue_hdul[0].data
+
+        new_gleam_name_r = dl_dir + "_repr_" + GC.create_filename(ra, dec, ang_size, freq_low[0])
+        montage.reproject(gleam_name_r, new_gleam_name_r, header="temp.txt", exact_size=True)
+        red_hdul = fits.open(new_gleam_name_r)
+        red_data = red_hdul[0].data
+
+        new_gleam_name_g = dl_dir + "_repr_" + GC.create_filename(ra, dec, ang_size, freq_low[1])
+        montage.reproject(gleam_name_g, new_gleam_name_g, header="temp.txt", exact_size=True)
+        green_hdul = fits.open(new_gleam_name_g)
+        green_data = green_hdul[0].data
+        RGB = np.dstack([red_data, green_data, blue_data])
+        RGB -= np.nanmin(RGB)
+        RGB /= np.nanmax(RGB)
+        wcs = WCS(blue_hdul[0].header)
+
     except:
-        blue_data = None
-        print("No Blue Image")
+        red_hdul = fits.open(gleam_name_r)
+        red_data = red_hdul[0].data
+        RGB = red_data
+        wcs = WCS(red_hdul[0].header)
 
-    rgb_image = np.dstack([red_data, green_data, blue_data])
-    wcs = WCS(red_hdul[0].header)
+
     image = fig.add_subplot(2, 3, index, projection=wcs)
-
-    rgb_image -= np.min(np.nanmin(rgb_image))
-    rgb_image /= np.max(np.nanmax(rgb_image))
-    image.imshow(rgb_image, vmin=-peak, vmax=peak, origin='lower')
+    image.imshow(RGB, vmin = -peak, vmax = peak, origin = 'lower')
     image.grid(color='white', ls='solid')
     image.set_xlabel('Right Ascension J2000')
     image.set_ylabel('Declination J2000')
     image.set_title("GLEAM")
     c = SkyCoord(str(gleam_RA) + " " + str(gleam_DEC), unit=(u.deg, u.deg))
     x, y = wcs.wcs_world2pix(c.ra.degree, c.dec.degree, 0)
-    image.add_patch(patches.Rectangle( (7.5, 7.5), 15, 15, fill=False, edgecolor="white"))
+    image.add_patch(patches.Rectangle((12.5, 12.5), 25, 25, fill=False, edgecolor="white"))
     image.plot(x, y, **gleam_marker)
+
 
 
     ## save image to png ##
@@ -288,7 +302,7 @@ catalogue='filtered_red_selection_fin.fits'
 t = Table.read(catalogue, format = 'fits')
 
 
-ob_row_num = 0
+ob_row_num = 115
 for i in cat_data:
     tempra = str(t.field('ra_088')[ob_row_num])
     tempdec = str(t.field('dec_088')[ob_row_num])
